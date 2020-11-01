@@ -3,15 +3,14 @@
  */
 package org.aksw.defacto.evaluation.generation;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.hp.hpl.jena.sparql.engine.ExecutionContext;
 import org.aksw.defacto.Constants;
 import org.aksw.defacto.Defacto;
 import org.aksw.defacto.util.ListUtil;
@@ -43,8 +42,99 @@ import com.hp.hpl.jena.tdb.TDBFactory;
 public class BenchmarkDataGeneration {
 
 	static String year;
-	
-	public static void dropEvalDirectory() throws IOException{
+    static String dataset_store_path = "/home/esteves/github/FactBench/all";
+
+    //CSV files
+    static String csv_split = ",";
+    static String csv_rel001_leader = "";
+    static String csv_rel002_birth = "";
+    static String csv_rel003_actor = "";
+    static String csv_rel004_death = "";
+    static String csv_rel005_NBA = "/home/esteves/github/FactBench/files/dbpedia/complete/out_dbpedia_rel_005.csv";
+
+    //SPARQL queries
+	static String qs_rel005_NBA =
+            "PREFIX dbo: <http://dbpedia.org/ontology/> " +
+                    "PREFIX dbr: <http://dbpedia.org/resource/> " +
+                    "PREFIX yago: <http://dbpedia.org/class/yago/> " +
+                    "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> " +
+                    "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> " +
+
+//				"SELECT ?player ?playerLabel ?timePeriod ?team ?teamLabel ?from ?to WHERE {  " +
+                    "SELECT ?player ?timePeriod ?team ?from ?to FROM <http://dbpedia.org> WHERE {  " +
+                    "?player dbo:league	dbr:NBA  .  " +
+//					"?player rdfs:label ?playerLabel .  " +
+                    "?player dbo:termPeriod ?timePeriod .  " +
+                    "?timePeriod dbo:team ?team .  " +
+//					"?team rdfs:label ?teamLabel .  " +
+                    "?team rdf:type yago:WikicatNationalBasketballAssociationTeams . " +
+                    "?timePeriod dbo:team ?team .  " +
+                    "?timePeriod dbo:activeYearsStartYear ?from . " +
+                    "?timePeriod dbo:activeYearsEndYear ?to . " +
+                    "FILTER( xsd:gYear(?from) > \"2000\"^^xsd:gYear ) " +
+                    "} ";
+
+    static String qs_rel001_politicians =
+            "PREFIX dbo: <http://dbpedia.org/ontology/> \n" +
+                    "PREFIX dbr: <http://dbpedia.org/resource/> \n" +
+                    "PREFIX yago: <http://dbpedia.org/class/yago/> \n" +
+                    "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
+                    "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> \n" +
+                    "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n\n" +
+
+                    "SELECT * \n" +
+                    "FROM <http://dbpedia.org> \n" +
+                    "WHERE { \n" +
+                    "\t?person dbo:termPeriod ?timePeriod . \n" +
+                    "\t?timePeriod dbo:office ?office . \n" +
+                    "\t?timePeriod dbo:activeYearsStartDate ?from . \n" +
+                    "\t?timePeriod dbo:activeYearsEndDate ?to . \n" +
+                    "\tFILTER (regex(?office, \"^Prime Minister of.*\")) \n" +
+                    "}";
+
+    static String qs_rel002_birth =
+            "PREFIX dbpedia-owl: <http://dbpedia.org/ontology/> \n" +
+                    "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
+
+                    "SELECT ?person ?place ?date  \n" +
+                    "WHERE {   \n" +
+                    "   ?person dbpedia-owl:birthPlace ?place .  \n" +
+                    "   ?place rdf:type dbpedia-owl:City  .   \n" +
+                    "   ?person dbpedia-owl:birthDate ?date .  \n" +
+                    "   ?person dbpedia-owl:numberOfInboundLinks ?personInbound .  \n" +
+                    "   ?place dbpedia-owl:numberOfInboundLinks ?placeInbound .  \n" +
+                    "}  \n" +
+                    "ORDER BY DESC(?personInbound) DESC(?placeInbound) \n ";
+
+    static String qs_rel003_starring =
+            "PREFIX dbo: <http://dbpedia.org/ontology/> \n" +
+                    "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
+
+                    "SELECT DISTINCT ?film ?actor ?date \n" +
+                    "WHERE {   \n" +
+                    "   ?film dbo:starring ?actor .  \n" +
+                    "   ?film rdf:type dbo:Film . \n" +
+                    "   ?film dbo:releaseDate ?date . \n " +
+                    "   ?film dbo:numberOfInboundLinks ?filmInbound .  \n" +
+                    "}  \n" +
+                    "ORDER BY DESC(?filmInbound) ASC(?date) \n ";
+
+    static String qs_rel004_death =
+            "PREFIX dbpedia-owl: <http://dbpedia.org/ontology/> \n" +
+                    "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
+
+                    "SELECT ?person ?place ?date \n" +
+                    "FROM <http://dbpedia.org> \n" +
+                    "WHERE {  \n" +
+                    "   ?person dbpedia-owl:deathPlace ?place . \n" +
+                    "   ?place rdf:type dbpedia-owl:City  .  \n" +
+                    "   ?person dbpedia-owl:deathDate ?date . \n" +
+                    "   ?person dbpedia-owl:numberOfInboundLinks ?personInbound . \n" +
+                    "   ?place dbpedia-owl:numberOfInboundLinks ?placeInbound . \n" +
+                    "} \n" +
+                    "ORDER BY DESC(?personInbound) DESC(?placeInbound)\n";
+
+    public static void dropEvalDirectory() throws IOException{
 		
 		FileUtils.deleteDirectory(new File(Defacto.DEFACTO_CONFIG.getStringSetting("eval", "data-directory") + "eval/correct/birth/"));
 		FileUtils.deleteDirectory(new File(Defacto.DEFACTO_CONFIG.getStringSetting("eval", "data-directory") + "eval/correct/death/"));
@@ -76,23 +166,35 @@ public class BenchmarkDataGeneration {
 	 * @throws IOException
 	 */
 	public static void main(String[] args) throws JSONException, IOException {
-		
-		Defacto.init();
-		BenchmarkPrerequisiteGeneration pre = new BenchmarkPrerequisiteGeneration();
-		
-		System.out.print("Start generating temporal facts ... ");
-		BenchmarkDataGeneration.dropEvalDirectory();
-		BenchmarkDataGeneration.loadSpouse();
-		BenchmarkDataGeneration.loadFoundationPlace();
-		BenchmarkDataGeneration.loadPublishDates();
-		BenchmarkDataGeneration.loadAwards();
-		BenchmarkDataGeneration.loadNBAPlayers();
-		BenchmarkDataGeneration.loadPoliticians();
-		BenchmarkDataGeneration.loadBirth();
-		BenchmarkDataGeneration.loadDeath();
-		BenchmarkDataGeneration.loadStarring();
-		BenchmarkDataGeneration.loadSubsidiary(); 
-		System.out.println("DONE!");
+
+
+	    try{
+            Defacto.init();
+            BenchmarkPrerequisiteGeneration pre = new BenchmarkPrerequisiteGeneration();
+
+            System.out.print("Start generating temporal facts ... ");
+            BenchmarkDataGeneration.dropEvalDirectory();
+
+            /* FreeBase */
+            //BenchmarkDataGeneration.loadSpouse();
+            //BenchmarkDataGeneration.loadFoundationPlace();
+            //BenchmarkDataGeneration.loadPublishDates();
+            //BenchmarkDataGeneration.loadAwards();
+            //BenchmarkDataGeneration.loadSubsidiary();
+
+            /* DBPedia */
+
+            //BenchmarkDataGeneration.loadPoliticians();
+            //BenchmarkDataGeneration.loadBirth();
+            //BenchmarkDataGeneration.loadStarring();
+            //BenchmarkDataGeneration.loadDeath();
+            BenchmarkDataGeneration.loadNBAPlayers(1);
+
+            System.out.println("DONE!");
+        }catch (Exception e){
+
+        }
+
 	}
 
 	public static void loadSubsidiary() throws JSONException, IOException {
@@ -141,7 +243,6 @@ public class BenchmarkDataGeneration {
 	
 	/**
 	 * 
-	 * @param foldername
 	 * @throws JSONException
 	 * @throws IOException
 	 */
@@ -194,7 +295,6 @@ public class BenchmarkDataGeneration {
 	
 	/**
 	 * 
-	 * @param foldername
 	 * @throws JSONException
 	 * @throws IOException
 	 */
@@ -358,107 +458,106 @@ public class BenchmarkDataGeneration {
 			}
 		}
 	}
-	
-	/**
-	 * 
-	 * @throws IOException
-	 */
-	public static void loadNBAPlayers() throws IOException {
-		
-		Dataset dataset = TDBFactory.createDataset("/Users/gerb/Development/workspaces/experimental/dbpedia/store");
-		Model dbpedia = dataset.getNamedModel("http://dbpedia.org");
-		
-		String queryString = 
-				"PREFIX dbo: <http://dbpedia.org/ontology/> " +
-				"PREFIX dbr: <http://dbpedia.org/resource/> " +
-				"PREFIX yago: <http://dbpedia.org/class/yago/> " +
-				"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> " +
-				"PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> " +
 
-//				"SELECT ?player ?playerLabel ?timePeriod ?team ?teamLabel ?from ?to WHERE {  " +
-				"SELECT ?player ?timePeriod ?team ?from ?to FROM <http://dbpedia.org> WHERE {  " +
-					"?player dbo:league	dbr:NBA  .  " +
-//					"?player rdfs:label ?playerLabel .  " +
-					"?player dbo:termPeriod ?timePeriod .  " +
-					"?timePeriod dbo:team ?team .  " +
-//					"?team rdfs:label ?teamLabel .  " +
-				    "?team rdf:type yago:NationalBasketballAssociationTeams . " +
-					"?timePeriod dbo:team ?team .  " +
-					"?timePeriod dbo:activeYearsStartYear ?from . " + 
-					"?timePeriod dbo:activeYearsEndYear ?to . " +
-					"FILTER( xsd:gYear(?from) > \"2000\"^^xsd:gYear ) " + 
-				"} ";
-		
-		Query query = QueryFactory.create(queryString, Syntax.syntaxARQ);
-		
-		int i = 0;
-		
-		ResultSet result = QueryExecutionFactory.create(query, dbpedia).execSelect();
 
-		while ( result.hasNext() ) {
-			
-			QuerySolution solution = result.next();
-			
-			String playerUri	= solution.getResource("player").getURI();
-			String teamUri		= solution.getResource("team").getURI();
-			String bnodeUri		= solution.getResource("timePeriod").getURI();
+    private static void saveNBAPlayers(String playerUri, String teamUri, String bnodeUri, String from, String to,
+                                       Integer i) throws Exception{
+        Map<String, Map<String, String>> languageLabels = getLanguageLabels(playerUri, teamUri);
+        Map<String,String> playerLabels = languageLabels.get(playerUri);
+        Map<String,String> teamLabels = languageLabels.get(teamUri);
+
+        // set namespaces
+        Model model = ModelFactory.createDefaultModel();
+        BenchmarkPrerequisiteGeneration.setPrefixes(model);
+
+        // create all the necessary nodes
+        Resource player			= model.createResource(playerUri);
+        Property bnodeProperty	= model.createProperty(Constants.DBPEDIA_ONTOLOGY_NAMESPACE + "playedTeam");
+        Resource bnode			= model.createResource(bnodeUri);
+        Property teamProperty	= model.createProperty(Constants.DBPEDIA_ONTOLOGY_NAMESPACE + "team");
+        Resource team			= model.createResource(teamUri);
+
+        // add them to the model
+        model.add(player, bnodeProperty, bnode);
+        model.add(bnode, teamProperty, team);
+        BenchmarkPrerequisiteGeneration.addDates(model, bnode, Constants.DEFACTO_FROM, from);
+        BenchmarkPrerequisiteGeneration.addDates(model, bnode, Constants.DEFACTO_TO, to);
+        BenchmarkPrerequisiteGeneration.addNames(model, player, playerLabels);
+        BenchmarkPrerequisiteGeneration.addNames(model, team, teamLabels);
+        BenchmarkPrerequisiteGeneration.addOwlSameAs(model, player);
+        BenchmarkPrerequisiteGeneration.addOwlSameAs(model, team);
+
+        // write them to the file
+        model.write(new FileWriter(new File(Defacto.DEFACTO_CONFIG.getStringSetting("eval", "data-directory")
+                + "eval/correct/nbateam/nbateam_" + (String.format("%05d", i)) + ".ttl")), "TURTLE");
+    }
+    private static void loadNBAPlayersFromCSV() throws Exception{
+
+        BufferedReader br = null;
+        String line = "";  // "player","team","timePeriod","from","to","dbin","dbout"
+        br = new BufferedReader(new FileReader(csv_rel005_NBA));
+        int i = 0;
+        while ((line = br.readLine()) != null) {
+
+            String[] values = line.split(csv_split);
+
+            saveNBAPlayers(values[0], values[1], values[2], values[3], values[4], i);
+            i++;
+
+        }
+
+    }
+	private static void loadNBAPlayersFromSPARQL() throws Exception{
+
+        Dataset dataset = TDBFactory.createDataset(dataset_store_path);
+        Model dbpedia = dataset.getNamedModel("http://dbpedia.org");
+        Query query = QueryFactory.create(qs_rel005_NBA, Syntax.syntaxARQ);
+        int i = 0;
+
+        ResultSet result = QueryExecutionFactory.create(query, dbpedia).execSelect();
+        while ( result.hasNext() ) {
+
+            QuerySolution solution = result.next();
+
+            String playerUri	= solution.getResource("player").getURI();
+            String teamUri		= solution.getResource("team").getURI();
+            String bnodeUri		= solution.getResource("timePeriod").getURI();
 //			String playerName	= solution.getLiteral("playerLabel").getLexicalForm();
 //			String teamName		= solution.getLiteral("teamLabel").getLexicalForm();
-			String from			= solution.getLiteral("from").getLexicalForm();
-			String to			= solution.getLiteral("to").getLexicalForm();
-			
-			Map<String, Map<String, String>> languageLabels = getLanguageLabels(playerUri, teamUri);
-			Map<String,String> playerLabels = languageLabels.get(playerUri);
-			Map<String,String> teamLabels = languageLabels.get(teamUri);
-			
-			// set namespaces
-			Model model = ModelFactory.createDefaultModel();
-			BenchmarkPrerequisiteGeneration.setPrefixes(model);
-			
-			// create all the necessary nodes
-			Resource player			= model.createResource(playerUri);
-            Property bnodeProperty	= model.createProperty(Constants.DBPEDIA_ONTOLOGY_NAMESPACE + "playedTeam");
-            Resource bnode			= model.createResource(bnodeUri);
-            Property teamProperty	= model.createProperty(Constants.DBPEDIA_ONTOLOGY_NAMESPACE + "team");
-            Resource team			= model.createResource(teamUri);
-			
-            // add them to the model
-            model.add(player, bnodeProperty, bnode);
-            model.add(bnode, teamProperty, team);
-            BenchmarkPrerequisiteGeneration.addDates(model, bnode, Constants.DEFACTO_FROM, from);
-            BenchmarkPrerequisiteGeneration.addDates(model, bnode, Constants.DEFACTO_TO, to);
-            BenchmarkPrerequisiteGeneration.addNames(model, player, playerLabels);
-            BenchmarkPrerequisiteGeneration.addNames(model, team, teamLabels);
-            BenchmarkPrerequisiteGeneration.addOwlSameAs(model, player);
-            BenchmarkPrerequisiteGeneration.addOwlSameAs(model, team);
-            
-			// write them to the file
-            model.write(new FileWriter(new File(Defacto.DEFACTO_CONFIG.getStringSetting("eval", "data-directory")
-            		+ "eval/correct/nbateam/nbateam_" + (String.format("%05d", i++)) + ".ttl")), "TURTLE");
-		}
+            String from			= solution.getLiteral("from").getLexicalForm();
+            String to			= solution.getLiteral("to").getLexicalForm();
+
+           saveNBAPlayers(playerUri, teamUri, bnodeUri, from, to, i);
+           i++;
+        }
+
+    }
+
+    /**
+     *
+     * @param type 0 = from SPARQL query, 1 = from csv file
+     * @throws IOException
+     */
+	public static void loadNBAPlayers(Integer type) throws Exception {
+
+	    if (type.equals(0)){
+            loadNBAPlayersFromSPARQL();
+        }else if (type.equals(1)){
+            loadNBAPlayersFromCSV();
+        }else{
+            throw new Exception("parameter value must be 1 or 2");
+        }
+
 	}
 	
 	public static void loadDeath() throws IOException {
 		
-		Dataset dataset = TDBFactory.createDataset("/Users/gerb/Development/workspaces/experimental/dbpedia/store");
+		Dataset dataset = TDBFactory.createDataset(dataset_store_path);
 		Model dbpedia = dataset.getNamedModel("http://dbpedia.org");
 		
-		String query =
-				"PREFIX dbpedia-owl: <http://dbpedia.org/ontology/> \n" + 
-				"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
 
-				"SELECT ?person ?place ?date \n" +
-				"FROM <http://dbpedia.org> \n" +
-				"WHERE {  \n" + 
-				"   ?person dbpedia-owl:deathPlace ?place . \n" +  
-				"   ?place rdf:type dbpedia-owl:City  .  \n" + 
-				"   ?person dbpedia-owl:deathDate ?date . \n" + 
-				"   ?person dbpedia-owl:numberOfInboundLinks ?personInbound . \n" +
-				"   ?place dbpedia-owl:numberOfInboundLinks ?placeInbound . \n" +
-				"} \n" + 
-				"ORDER BY DESC(?personInbound) DESC(?placeInbound)\n";
 		
-		List<QuerySolution> results = getResults(query, dbpedia);
+		List<QuerySolution> results = getResults(qs_rel004_death, dbpedia);
 		
 		// we create 5 parts so that we take some very popular, some  
 		// popular, some not so popular... and not popular persons
@@ -508,23 +607,12 @@ public class BenchmarkDataGeneration {
 	
 	public static void loadStarring() throws IOException {
 		
-		Dataset dataset = TDBFactory.createDataset("/Users/gerb/Development/workspaces/experimental/dbpedia/store");
+		Dataset dataset = TDBFactory.createDataset(dataset_store_path);
 		Model dbpedia = dataset.getNamedModel("http://dbpedia.org");
 		
-		String query =
-				"PREFIX dbo: <http://dbpedia.org/ontology/> \n" +
-				"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
 
-				"SELECT DISTINCT ?film ?actor ?date \n" + 
-				"WHERE {   \n" + 
-				"   ?film dbo:starring ?actor .  \n" +  
-				"   ?film rdf:type dbo:Film . \n" +  
-				"   ?film dbo:releaseDate ?date . \n " +  
-				"   ?film dbo:numberOfInboundLinks ?filmInbound .  \n" +
-				"}  \n" +  
-				"ORDER BY DESC(?filmInbound) ASC(?date) \n ";
 		
-		QueryExecution qexec = QueryExecutionFactory.create(QueryFactory.create(query, Syntax.syntaxARQ), dbpedia);
+		QueryExecution qexec = QueryExecutionFactory.create(QueryFactory.create(qs_rel003_starring, Syntax.syntaxARQ), dbpedia);
 		ResultSet rs = qexec.execSelect();
         
 		List<QuerySolution> results = new ArrayList<QuerySolution>();
@@ -616,24 +704,10 @@ public class BenchmarkDataGeneration {
 	 */
 	public static void loadBirth() throws IOException {
 		
-		Dataset dataset = TDBFactory.createDataset("/Users/gerb/Development/workspaces/experimental/dbpedia/store");
+		Dataset dataset = TDBFactory.createDataset(dataset_store_path);
 		Model dbpedia = dataset.getNamedModel("http://dbpedia.org");
-		
-		String query =
-				"PREFIX dbpedia-owl: <http://dbpedia.org/ontology/> \n" +
-				"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
 
-				"SELECT ?person ?place ?date  \n" + 
-				"WHERE {   \n" + 
-				"   ?person dbpedia-owl:birthPlace ?place .  \n" +  
-				"   ?place rdf:type dbpedia-owl:City  .   \n" + 
-				"   ?person dbpedia-owl:birthDate ?date .  \n" + 
-				"   ?person dbpedia-owl:numberOfInboundLinks ?personInbound .  \n" +
-				"   ?place dbpedia-owl:numberOfInboundLinks ?placeInbound .  \n" +
-				"}  \n" +  
-				"ORDER BY DESC(?personInbound) DESC(?placeInbound) \n ";
-		
-		List<QuerySolution> results = getResults(query, dbpedia);
+		List<QuerySolution> results = getResults(qs_rel002_birth, dbpedia);
 		
 		// we create 5 parts so that we take some very popular, some  
 		// popular, some not so popular... and not popular persons
@@ -687,28 +761,10 @@ public class BenchmarkDataGeneration {
 	 */
 	public static void loadPoliticians() throws IOException {
 		
-		Dataset dataset = TDBFactory.createDataset("/Users/gerb/Development/workspaces/experimental/dbpedia/store");
+		Dataset dataset = TDBFactory.createDataset(dataset_store_path);
 		Model dbpedia = dataset.getNamedModel("http://dbpedia.org");
-		
-		String defaultQuery = 
-				"PREFIX dbo: <http://dbpedia.org/ontology/> \n" +
-				"PREFIX dbr: <http://dbpedia.org/resource/> \n" +
-				"PREFIX yago: <http://dbpedia.org/class/yago/> \n" +
-				"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
-				"PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> \n" +
-				"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n\n" +
-				
-				"SELECT * \n" +
-				"FROM <http://dbpedia.org> \n" +
-				"WHERE { \n" +
-					"\t?person dbo:termPeriod ?timePeriod . \n" + 
-					"\t?timePeriod dbo:office ?office . \n" + 
-					"\t?timePeriod dbo:activeYearsStartDate ?from . \n" + 
-					"\t?timePeriod dbo:activeYearsEndDate ?to . \n" +
-					"\tFILTER (regex(?office, \"^Prime Minister of.*\")) \n" +
-				"}";
-		
-		Query query = QueryFactory.create(defaultQuery, Syntax.syntaxARQ);
+
+		Query query = QueryFactory.create(qs_rel001_politicians, Syntax.syntaxARQ);
 		
 		int i = 0;
 		
@@ -769,7 +825,7 @@ public class BenchmarkDataGeneration {
 	 */
 	private static String getCountryUri(String countryName) {
 		
-		Dataset dataset = TDBFactory.createDataset("/Users/gerb/Development/workspaces/experimental/dbpedia/store");
+		Dataset dataset = TDBFactory.createDataset(dataset_store_path);
 		Model dbpedia = dataset.getNamedModel("http://dbpedia.org");
 		
 		String queryString = 
@@ -804,7 +860,7 @@ public class BenchmarkDataGeneration {
 	 */
 	private static Map<String, Map<String, String>> getLanguageLabels(String playerUri, String teamUri) {
 
-		Dataset dataset = TDBFactory.createDataset("/Users/gerb/Development/workspaces/experimental/dbpedia/store");
+		Dataset dataset = TDBFactory.createDataset(dataset_store_path);
 		Model dbpedia = dataset.getNamedModel("http://dbpedia.org");
 		
 		String queryString = 
@@ -872,8 +928,6 @@ public class BenchmarkDataGeneration {
 	/**
 	 * 
 	 * @param query
-	 * @param limit
-	 * @param offset
 	 * @return
 	 */
     protected static List<QuerySolution> getResults(String query) {
