@@ -74,10 +74,7 @@
             <id>sameas-4j-googlecode</id>
             <url>http://asmx-sameas4j.googlecode.com/svn/repo</url>
         </repository>
-        <repository>
-            <id>wordnet</id>
-            <url>https://dev-iesl.cs.umass.edu/nexus/content/repositories/public/</url>
-        </repository>
+
         <repository>
             <releases>
                 <enabled>true</enabled>
